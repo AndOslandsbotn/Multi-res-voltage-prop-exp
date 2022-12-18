@@ -1,0 +1,3 @@
+covertree:
+  nlvls: 6 #12
+  epsilon_reduce_factor: 2
