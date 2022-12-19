@@ -1,6 +1,6 @@
 grounded_graph:
   kernel_type: 'radial'  # Kernel type used to construct weight matrix
-  default_kernel_bandwidth: 0.12  # Default bandwidth in kernel
+  default_kernel_bandwidth: 0.22  # Default bandwidth in kernel
   weight_to_ground: 1.e-2  # Default weight to ground
 propagator:
   disable_tqdm: False

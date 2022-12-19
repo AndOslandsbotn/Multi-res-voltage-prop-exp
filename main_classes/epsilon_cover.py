@@ -68,6 +68,7 @@ class BasicCoverTree():
 
         self.nodes = {}
         self.centers = {}
+        self.densities = {}
         self.roots = []
         self.tree_depth = 0
         return
@@ -91,14 +92,11 @@ class BasicCoverTree():
     def estimate_densities(self, x):
         n = len(x)
         centers = self.get_centers()
-        densities = {}
         for lvl in centers.keys():
             index_closest_center = np.argmin(cdist(x, centers[lvl]), axis=1)
-            densities[lvl] = np.zeros(len(centers[lvl]))
+            self.densities[lvl] = np.zeros(len(centers[lvl]))
             for center_idx in range(0, len(centers[lvl])):
-                densities[lvl][center_idx] = np.sum(index_closest_center==center_idx)/n
-        return densities
-
+                self.densities[lvl][center_idx] = np.sum(index_closest_center==center_idx)/n
 
     def insert(self, x):
         path = self.find_path(x, self.roots)
@@ -169,19 +167,19 @@ class BasicCoverTree():
         else:
             return self.nodes[lvl]
 
+    def get_epsilon_cover(self, max_lvl):
+        densities = self.get_densities()
+        centers = self.get_centers()
+        epsilon_cover = {}
+        for lvl in range(1, max_lvl):
+            if lvl not in epsilon_cover.keys():
+                epsilon_cover[lvl] = {}
+            epsilon_cover[lvl]['centers'] = np.array(centers[lvl])
+            epsilon_cover[lvl]['densities'] = densities[lvl]
+        return epsilon_cover
+
     def get_densities(self, lvl=None):
-        densities = {}
-        if lvl is None:
-            for lvl in range(1, self.max_depth+1):
-                densities[lvl] = []
-                for node in self.nodes[lvl]:
-                    densities[lvl].append(node.get_density())
-            return densities
-        else:
-            densities[lvl] = []
-            for node in self.nodes:
-                densities[lvl].append(node.get_density())
-            return densities
+        return self.densities
 
     def get_depth(self):
         return self.max_depth
@@ -190,7 +188,7 @@ class BasicCoverTree():
         if lvl is None:
             return self.centers
         else:
-            return self.centers[lvl]
+            return np.array(self.centers[lvl])
 
     def get_radius(self, lvl):
         return self.init_radius/(2**(lvl-1))
@@ -244,7 +242,6 @@ from utilities.generate_toy_data import generate_2D_plane, non_uniform_1d_experi
 if __name__ == '__main__':
     #data, _, _ = non_uniform_1d_experiment()
     data = generate_2D_plane(datasize=10000)
-    print(data.shape)
     init_radius = estimate_span(data)
     epsilon_cover_factory = BasicCoverTree(init_radius)
     for x in data:

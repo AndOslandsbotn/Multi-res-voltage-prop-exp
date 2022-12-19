@@ -1,0 +1,16 @@
+Things we need to resolve
+
+1.) Indexing of sources so that we can keep track of sources across different levels of resolution
+This is because we want to use the same source for each level
+
+
+2.) Since we are trimming the epsilon covers at each level, it is particularly important with a good
+indexing scheme for keeping track of nodes.
+
+3.) We need to find a way to weight the source index now that we have decided to not use 
+a region source, but instead use a point source with weight.
+- TO weight by the density dont work
+- My suggestion is to weight with the number of samples inside epsilon ball, but not divide by number
+of other nodes in epsilon cover. This way we dont consider the density per say. This strategy did seem to work
+better with the initial experiments, in terms of approximating the voltage distribution over the
+actual density.
