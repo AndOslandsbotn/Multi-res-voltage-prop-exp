@@ -1,11 +1,13 @@
 grounded_graph:
   kernel_type: 'radial'  # Kernel type used to construct weight matrix
   default_kernel_bandwidth: 0.22  # Default bandwidth in kernel
-  weight_to_ground: 1.e-2  # Default weight to ground
+  default_weight_to_ground: 1.e-2  # Default weight to ground
+  default_source_radius: 0.09  # Default source radius
+  is_source_region: True
 propagator:
   disable_tqdm: False
   max_iter: 1000  # Maximum number of iterations when propagating voltage
   progress_thr: 1.e-4 # Tolerance on voltage change when propagating voltage
-  use_sparse: True
+  use_sparse: False
 trimming:
   thr_voltage_magnitude: 1.e-3

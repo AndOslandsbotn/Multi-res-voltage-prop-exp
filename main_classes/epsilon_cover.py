@@ -31,6 +31,9 @@ class CoverTreeNode():
         return 'Node path=%s, radius=%5.2f, %d children' % \
                (self.path, self.radius, len(self.children)) + 'center=' + str(self.center)
 
+    def get_path(self):
+        return self.path
+
     def get_center(self):
         return self.center
 
@@ -128,16 +131,20 @@ class BasicCoverTree():
         :param x: center of new node
         :param path: path to parent of new node
         """
-        leaf = path[-1]
-        new = CoverTreeNode(x, leaf.radius / 2, leaf.path + (leaf.num_children(),))
-        new.parent = leaf
-        new.root = leaf.root
-        leaf.children.append(new)
 
-        self.update_dictionaries(new)
-        if len(new.path) > self.tree_depth:
-            self.tree_depth = len(new.path)
-        return new
+        leaf = path[-1]
+        if not len(leaf.get_path()) >= self.max_depth:
+            new = CoverTreeNode(x, leaf.radius / 2, leaf.path + (leaf.num_children(),))
+            new.parent = leaf
+            new.root = leaf.root
+            leaf.children.append(new)
+
+            self.update_dictionaries(new)
+            if len(new.path) > self.tree_depth:
+                self.tree_depth = len(new.path)
+
+            self.add_new_node(x, [new])  # Add node as child to itself
+            return new
 
     def add_new_root(self, x):
         """
@@ -148,8 +155,9 @@ class BasicCoverTree():
         new.parent = None
         new.root = new
         self.roots.append(new)
-
         self.update_dictionaries(new)
+
+        self.add_new_node(x, [new])  # Add node as child to itself
         return
 
     def update_dictionaries(self, new_node):

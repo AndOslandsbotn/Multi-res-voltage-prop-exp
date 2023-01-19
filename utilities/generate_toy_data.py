@@ -17,7 +17,7 @@ def generate_swissRoll(N, D, eps):
     return swissRoll, xcoord
 
 def non_uniform_1d_experiment():
-    n = 50
+    n = 100
     density_source = 40*n
     density1 = 40*n
     density2 = 60*n
