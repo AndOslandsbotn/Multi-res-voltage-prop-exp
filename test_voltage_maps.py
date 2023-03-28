@@ -8,8 +8,8 @@ from utilities.generate_toy_data import non_uniform_1d_experiment, generate_2D_p
 if __name__ == '__main__':
     max_lvl = 4
     start_lvl = 3
-    dim = 2
-    if dim==1:
+    dim = 1
+    if dim == 1:
         data, _, _ = non_uniform_1d_experiment()
     elif dim ==2:
         data = generate_2D_plane(datasize=10000)
