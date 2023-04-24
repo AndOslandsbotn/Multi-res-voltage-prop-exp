@@ -12,6 +12,7 @@ from tqdm import tqdm
 from definitions import CONFIG_VOLTAGE_MAPS_PATH
 from config.yaml_functions import yaml_loader
 
+
 class VoltageMap():
     """ This class generates a voltage function over
         an epsilon cover with respect to a given source region
@@ -28,6 +29,9 @@ class VoltageMap():
         - kernel_bandwidth: (Optional) (float) Bandwidth of kernel
         - weight_to_ground: (Optional) (float) Weight of ground node
         - source_radius: (Optional) (float) Radius of source region
+        - weight_to_ground (Optional) (float) weight to ground
+        - is_source_region (Optional) (Bool) If true use source region, if false only is source center
+        - kernel_type (Optional) (string) Name of kernel type
 
     ## Public methods
         # propagate_voltage
@@ -45,12 +49,19 @@ class VoltageMap():
         # get_trimmed_epsilon_cover
     """
 
-    def __init__(self, epsilon_cover, source_center_index, kernel_bandwidth=None, weight_to_ground=None, source_radius=None):
-        self.config = yaml_loader(CONFIG_VOLTAGE_MAPS_PATH)
+    def __init__(self, config, epsilon_cover, source_center_index,
+                 kernel_bandwidth=None, weight_to_ground=None, source_radius=None,
+                 is_source_region=None, kernel_type=None):
+        self.config = config
 
-        self.kernel_type = self.config['grounded_graph']['kernel_type']
-        self.is_source_region = self.config['grounded_graph']['is_source_region']
-
+        if kernel_type is None:
+            self.kernel_type = self.config['grounded_graph']['kernel_type']
+        else:
+            self.kernel_type = kernel_type
+        if is_source_region is None:
+            self.is_source_region = self.config['grounded_graph']['is_source_region']
+        else:
+            self.is_source_region = is_source_region
         if kernel_bandwidth is None:
             self.kernel_bandwidth = self.config['grounded_graph']['default_kernel_bandwidth']
         else:
@@ -59,12 +70,6 @@ class VoltageMap():
             self.weight_to_ground = self.config['grounded_graph']['default_weight_to_ground']
         else:
             self.weight_to_ground = weight_to_ground
-
-        #dim = epsilon_cover['centers'].shape[1]
-        #self.bw_epsilon_factor = self.config['grounded_graph']['bw_epsilon_factor']
-        #self.kernel_bandwidth = np.sqrt(epsilon_cover['epsilon']) #*self.bw_epsilon_factor
-        #self.weight_to_ground = 0.01*np.pi**(dim/2)/gamma_function(dim/2+1)*self.kernel_bandwidth**(dim) #weight_to_ground
-
         if source_radius is None:
             self.source_radius = self.config['grounded_graph']['default_source_radius']
         else:
@@ -98,6 +103,7 @@ class VoltageMap():
     def _initialize_voltage_default(self):
         """As a default, initialize voltage on all nodes to zero and the voltage on sources to the source constraint"""
         self.voltage = np.zeros(self.epsilon_cover['centers'].shape[0])
+        self.source_region_indices = self._find_source_region()
         self._add_source_constraints_to_voltage()
 
     def init_voltage_from_rougher_resolution(self, rougher_epsilon_cover, rougher_voltages):
@@ -107,6 +113,7 @@ class VoltageMap():
         """
         distances = cdist(self.epsilon_cover['centers'], rougher_epsilon_cover['centers'])
         self.voltage = distances.dot(np.multiply(rougher_voltages, rougher_epsilon_cover['densities']))
+        self.source_region_indices = self._find_source_region()
         self._add_source_constraints_to_voltage()
 
     def _find_source_region(self):
@@ -118,18 +125,15 @@ class VoltageMap():
     def _add_source_constraints_to_voltage(self):
         """Add source constraints to voltage"""
         if self.is_source_region:
-            self.source_region_indices = self._find_source_region()
-            self.voltage[self.source_region_indices] = np.ones(len(self.source_region_indices))
+            self.voltage[self.source_region_indices] = 1
         else:
-            """NB! voltage = source density does not seem to work 
-            Instead perhaps we can try v = number of points inside the
-            source node, without dividing by n"""
+            """NB! voltage = source density does not give nice results. This has to be investigated"""
             self.voltage[self.source_center_index] = self.epsilon_cover['densities'][self.source_center_index]
 
     def trimmer(self):
         """Removes the points in the epsilon cover that have voltage below voltage_inclusion_thr"""
         #indices = (self.voltage >= self.voltage_inclusion_thr)
-        indices = (self.voltage >= 0)
+        indices = (self.voltage >= 0) # Currently threshold set to 0, since with threshold there are certain problems we need to resolve
         self.trimmed_epsilon_cover['centers'] = self.epsilon_cover['centers'][indices]
         self.trimmed_epsilon_cover['densities']= self.epsilon_cover['densities'][indices]
         self.voltage = self.voltage[indices]
@@ -146,30 +150,15 @@ class VoltageMap():
         inv_degree_matrix = 1 / (np.sum(transition_matrix, axis=1) + self.weight_to_ground * self.trimmed_epsilon_cover['densities'])
         self.transition_matrix = np.multiply(inv_degree_matrix[:, None], transition_matrix)
 
-        # Apply source constraints to transition matrix
-        #if self.is_source_region:
-        #    self.transition_matrix[self.source_region_indices, :] = 0
-        #    self.transition_matrix[self.source_region_indices, self.source_region_indices] = 1
-        #else:
-        #    self.transition_matrix[self.source_center_index, :] = 0
-        #    self.transition_matrix[self.source_center_index, self.source_center_index] = 1
-
         if self.use_sparse:
             self.transition_matrix = csc_matrix(self.transition_matrix)
-
-    def apply_constraints(self):
-        self.voltage
-        if self.is_source_region:
-            self.voltage[self.source_region_indices] = 1
-        else:
-            self.voltage[self.source_center_index] = 1
 
     def propagate_voltage(self):
         """Propagate voltage by iteratively applying the grounded weight matrix (transition_matrix)"""
         voltage_prev = np.ones(len(self.voltage))*np.inf
         for _ in tqdm(range(0, self.max_iter), desc='propagating labels', disable=self.disable_tqdm):
             self.voltage = self.transition_matrix.dot(self.voltage)
-            self.apply_constraints()
+            self._add_source_constraints_to_voltage()
 
             if self._voltage_monitor(self.voltage, voltage_prev):
                 break
@@ -270,58 +259,4 @@ class VoltageMapCollection():
 
     def save_voltage_maps(self, filepath):
         np.savez(filepath, voltages=self.voltages)
-
-
-class MultiResolutionEmbedding():
-    def __init__(self, results_folder, results_filename):
-        self.config = yaml_loader(CONFIG_VOLTAGE_MAPS_PATH)
-        self.source_lvl = self.config['embedding']['source_lvl']
-        min, max = self.config['embedding']['embedding_lvls']
-        self.embedding_lvls = np.arange(min, max+1, 1)
-
-        self.results_folder = os.path.join('Results', results_folder)
-        Path(self.results_folder).mkdir(parents=True, exist_ok=True)
-        self.results_filename = results_filename
-
-        self.voltage_map_collections = {}
-        self.source_indices = {}
-        self.source_centers = None
-        self.epsilon_covers = None
-
-        self.time_logg = {}
-
-    def add_epsilon_covers(self, filename):
-        self.epsilon_covers = load_pickle_data('Data', filename)
-        self.source_centers = self.epsilon_covers[self.source_lvl]['centers']
-
-    def run(self):
-        _, exec_time = self.run_with_timeit()
-        self.time_logg[f'exec_time_tot'] = exec_time
-        self.save_time_logg()
-
-    @timer_func
-    def run_with_timeit(self):
-        for i, lvl in enumerate(self.embedding_lvls):
-            self.source_indices[lvl] = np.where(np.all(np.isin(self.epsilon_covers[lvl]['centers'],
-                                                               self.source_centers), axis=1))[0]
-
-            self.voltage_map_collections[lvl] = VoltageMapCollection(self.epsilon_covers[lvl],
-                                                                          self.source_indices[lvl])
-
-            if i > 0 and self.config['embedding']['init_from_rougher']:
-                rougher_voltages = self.voltage_map_collections[lvl-1].get_voltages()
-                self.voltage_map_collections[lvl].init_voltage_maps_from_rougher_resolution(self.epsilon_covers[lvl-1],
-                                                                                                  rougher_voltages)
-
-            _, exec_time = self.voltage_map_collections[lvl].propagate_voltage_maps()
-            self.time_logg[f'exec_time_lvl{lvl}'] = exec_time
-
-            self.voltage_map_collections[lvl].save_voltage_maps(
-                filepath=os.path.join(self.results_folder, self.results_filename + f'_lvl{lvl}.npz'))
-
-
-    def save_time_logg(self):
-        with open(os.path.join(self.results_folder, 'time_logg'), "w") as outfile:
-            json.dump(self.time_logg, outfile)
-
 

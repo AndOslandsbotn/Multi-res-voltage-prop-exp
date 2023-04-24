@@ -10,5 +10,9 @@ propagator:
   max_iter: 1000  # Maximum number of iterations when propagating voltage
   progress_thr: 1.e-6 # Tolerance on voltage change when propagating voltage
   use_sparse: False
+embedding:
+  source_lvl: 3
+  embedding_lvls: [5, 6] # range of embedding levels
+  init_from_rougher: True
 trimming:
   thr_voltage_magnitude: 1.e-3

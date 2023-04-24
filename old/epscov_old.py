@@ -19,8 +19,7 @@ def build_epsilon_covers(data):
         epsilon_cover_factory.insert([x, idx])
 
     epsilon_cover_factory.estimate_densities(data)
-    epsilon_cover = epsilon_cover_factory.get_epsilon_cover()
-    epsilon_cover['init_radius'] = init_radius
+    epsilon_cover = epsilon_cover_factory.get_epsilon_cover(max_lvl=9)
     return epsilon_cover
 
 def estimate_span(dataset):
@@ -29,6 +28,7 @@ def estimate_span(dataset):
     dataset = dataset[indices, :]
     init_radius = np.sqrt(np.sum(np.array([(max(abs(dataset[:, i]))-min(abs(dataset[:, i])))**2 for i in range(0, len(dataset[0, :]))])))
     return init_radius
+
 
 class CoverTreeNode():
     def __init__(self, center, idx, radius, path, parent=None):
@@ -235,7 +235,7 @@ class BasicCoverTree():
                 epsilon_cover[lvl] = {}
             epsilon_cover[lvl]['centers'] = np.array(centers[lvl])
             epsilon_cover[lvl]['indices'] = np.array(indices[lvl])
-            epsilon_cover[lvl]['densities'] = densities[lvl]
+            epsilon_cover[lvl]['densities'] = np.array(densities[lvl])
             epsilon_cover[lvl]['epsilon'] = self.init_radius / (self.epsilon_reduce_factor ** lvl)
         return epsilon_cover
 
@@ -300,28 +300,3 @@ def check(allcenters):
         centers = allcenters[lvl]
         sum = sum + len(centers)
     print("Check sum of nodes: ", sum)
-
-
-from utilities.generate_toy_data import generate_2D_plane, non_uniform_1d_experiment
-if __name__ == '__main__':
-    #data, _, _ = non_uniform_1d_experiment()
-    data = generate_2D_plane(datasize=10000)
-    init_radius = estimate_span(data)
-    epsilon_cover_factory = BasicCoverTree(init_radius)
-    for x in data:
-        epsilon_cover_factory.insert(x)
-
-    epsilon_reduce_factor = 2
-    indices = [0, 1]
-    centers = epsilon_cover_factory.get_centers()
-
-    #data_density_estimation, _, _ = non_uniform_1d_experiment()
-    data_density_estimation = generate_2D_plane(datasize=10000)
-    data_density_estimation += np.random.normal(0, 0.01, size=data_density_estimation.shape)
-    densities = epsilon_cover_factory.estimate_densities(data_density_estimation)
-
-    for lvl in range(1, 5):
-        print(densities[lvl])
-        print(np.sum(densities[lvl]))
-    run_cover_properties_test(centers, epsilon_reduce_factor, init_radius, indices)
-    plt.show()

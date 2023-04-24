@@ -8,19 +8,29 @@ from definitions import CONFIG_COVER_TREE_PATH
 from config.yaml_functions import yaml_loader
 
 def build_epsilon_covers(data):
+    """Estimates the span of the data and build an epsilon cover using the cover-tree algorithm"""
     init_radius = 2 * estimate_span(data)
 
     epsilon_cover_factory = BasicCoverTree(init_radius)
-    indices = np.random.permutation(np.arange(0, len(data)))
+    indices = np.arange(0, len(data))
     for counter, idx in enumerate(indices):
         x = data[idx]
         if counter % 10000 == 0:
             print(f'number of processed points = {counter}')
         epsilon_cover_factory.insert([x, idx])
+    return epsilon_cover_factory.get_epsilon_cover()
 
-    epsilon_cover_factory.estimate_densities(data)
-    epsilon_cover = epsilon_cover_factory.get_epsilon_cover(max_lvl=9)
-    return epsilon_cover
+def estimate_densities(epsilon_cover_centers, data):
+    """Using samples in data to estimate density associated with each Veronoi cell in the epsilon covered
+    :param: epsilon_cover_centers: numpy array m x d, where m is the number of centers in the eps-cover and d the dimension
+    :param: data: numpy array n x d, where n is the number of samples and d the dimension
+    """
+    index_closest_center = np.argmin(cdist(data, epsilon_cover_centers), axis=1)
+    densities = np.zeros(len(epsilon_cover_centers))
+    num_processed_points = len(data)
+    for center_idx in range(0, len(epsilon_cover_centers)):
+        densities[center_idx] = np.sum(index_closest_center==center_idx)/num_processed_points
+    return densities
 
 def estimate_span(dataset):
     """Estimate the span of the dataset"""
@@ -28,7 +38,6 @@ def estimate_span(dataset):
     dataset = dataset[indices, :]
     init_radius = np.sqrt(np.sum(np.array([(max(abs(dataset[:, i]))-min(abs(dataset[:, i])))**2 for i in range(0, len(dataset[0, :]))])))
     return init_radius
-
 
 class CoverTreeNode():
     def __init__(self, center, idx, radius, path, parent=None):
@@ -42,9 +51,7 @@ class CoverTreeNode():
         self.parent = parent
         self.root = None
         self.path = path  # Identifier that indicates the position of the node in the tree
-        self.density = 0
         return
-
 
     def __str__(self):
         return 'Node path=%s, radius=%5.2f, %d children' % \
@@ -95,7 +102,6 @@ class BasicCoverTree():
         self.nodes = {}
         self.indices = {}
         self.centers = {}
-        self.densities = {}
         self.roots = []
         self.tree_depth = 0
         return
@@ -115,40 +121,6 @@ class BasicCoverTree():
                 nn = node
                 dist = _dist(x, node.center)
         return nn, dist
-
-    def estimate_densities(self, x):
-        print("Estimate densities")
-        n = len(x)
-        centers = self.get_centers()
-        for lvl in centers.keys():
-            print(f'lvl {lvl}')
-            num_centers = len(centers[lvl])
-            num_batches = int(np.ceil(n*num_centers/self.max_memory))
-            batch_size = int(n/num_batches)
-            self.densities[lvl] = np.zeros(len(centers[lvl]))
-            for j in range(0, num_batches):
-                if j == 0 or j % int(np.ceil(num_batches*0.2)) == 0:
-                    print(f'batch number {j}/{num_batches} num_centers {num_centers}')
-                start = j*batch_size
-                stop = (j+1)*batch_size
-                if stop > n:
-                    stop = n
-                if start > n:
-                    start = n
-                x_batch = x[start:stop, :]
-                index_closest_center = np.argmin(cdist(x_batch, centers[lvl]), axis=1)
-                for center_idx in range(0, len(centers[lvl])):
-                    self.densities[lvl][center_idx] += np.sum(index_closest_center==center_idx)
-            self.densities[lvl] = self.densities[lvl]/n
-
-    def estimate_densities_simple(self, x):
-        n = len(x)
-        centers = self.get_centers()
-        for lvl in centers.keys():
-            index_closest_center = np.argmin(cdist(x, centers[lvl]), axis=1)
-            self.densities[lvl] = np.zeros(len(centers[lvl]))
-            for center_idx in range(0, len(centers[lvl])):
-                self.densities[lvl][center_idx] = np.sum(index_closest_center==center_idx)/n
 
     def insert(self, x):
         path = self.find_path(x[0], self.roots)
@@ -225,22 +197,21 @@ class BasicCoverTree():
         else:
             return self.nodes[lvl]
 
-    def get_epsilon_cover(self, max_lvl):
-        densities = self.get_densities()
+    def get_epsilon_cover(self, max_lvl=None):
         centers = self.get_centers()
         indices = self.get_indices()
         epsilon_cover = {}
+        if max_lvl is None:
+            max_lvl = self.max_depth
+
         for lvl in range(1, max_lvl):
             if lvl not in epsilon_cover.keys():
                 epsilon_cover[lvl] = {}
             epsilon_cover[lvl]['centers'] = np.array(centers[lvl])
             epsilon_cover[lvl]['indices'] = np.array(indices[lvl])
-            epsilon_cover[lvl]['densities'] = np.array(densities[lvl])
             epsilon_cover[lvl]['epsilon'] = self.init_radius / (self.epsilon_reduce_factor ** lvl)
         return epsilon_cover
 
-    def get_densities(self, lvl=None):
-        return self.densities
 
     def get_indices(self, lvl=None):
         return self.indices
